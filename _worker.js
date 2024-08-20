@@ -24,40 +24,53 @@ async function handleRequest(request) {
 
   const sources = [
     `https://www.google.com/s2/favicons?domain=${domain}&sz=50`,
-    `https://icons.duckduckgo.com/ip3/${domain}.ico`,
-    `https://icon.horse/icon/${domain}`
+    `https://icons.duckduckgo.com/ip3/${domain}.ico`
   ]
   const modifiedRequestInit = {
     method: request.method,
     headers: request.headers,
     redirect: 'follow'
   };
+
+  let response = new Response();
   for (let i = 0; i < sources.length; i++) {
     const source = sources[i]
     try {
-      const response = await fetch(source, modifiedRequestInit)
-      
-      // For Google and DuckDuckGo, we can check for 404
-      if (i < 2 && response.status === 404) {
-        continue
-      }
-      
-      // For icon.horse, we can't reliably check for 404, so we'll just use it if we reach this point
-      
-      // If we've reached here, we have a valid response
-      return new Response(response.body, {
-        headers: {
-          'Content-Type': 'image/x-icon',
-          'Cache-Control': 'public, max-age=86400',
-        },
-      })
+      response = await fetch(source, modifiedRequestInit)
+       
+      if (response.status == 200) {
+        break;
+      } 
+
     } catch (error) {
       console.error(`Error fetching from ${source}: ${error}`)
     }
   }
 
-  // If we've exhausted all sources, return a 404
-  return new Response('Favicon not found', { status: 404 })
+   if (response.status !== 200) {
+    const firstLetter = domain.charAt(0).toUpperCase();
+    const svgContent = `
+      <svg width="100" height="100" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100%" height="100%" fill="#cccccc"/>
+        <text x="50%" y="50%" font-size="48" text-anchor="middle" dominant-baseline="middle" fill="#000000">${firstLetter}</text>
+      </svg>
+    `;
+    return new Response(svgContent, {
+      status: 200,
+      headers: {
+        'Cache-Control': 'public, max-age=86400',
+        'Content-Type': 'image/svg+xml'
+      }
+    });
+  } else {
+    // Return the fetched favicon
+    return new Response(response.body, {
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'image/x-icon',
+        'Cache-Control': 'public, max-age=86400',
+      },
+    });
+  }
 }
 
 function getHomepage(origin) {
